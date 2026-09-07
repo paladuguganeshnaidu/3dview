@@ -125,7 +125,8 @@
     <h3>Volumetric Parcel Record</h3>
     <div class="card-row"><span class="card-label">Object ID:</span><span class="card-value" id="card-id">-</span></div>
     <div class="card-row"><span class="card-label">Building Height:</span><span class="card-value" id="card-height">-</span></div>
-    <div class="card-row"><span class="card-label">Estimated Floors:</span><span class="card-value" id="card-floors">-</span></div>
+    <div class="card-row"><span class="card-label">Floors:</span><span class="card-value" id="card-floors">-</span></div>
+    <div class="card-row"><span class="card-label">Floor source:</span><span class="card-value" id="card-floor-source">-</span></div>
     <div class="card-row"><span class="card-label">Ground Datum (Z):</span><span class="card-value" id="card-z">-</span></div>
     <div class="card-label" style="margin-top: 10px;">Assigned 3D ULPIN:</div>
     <div class="ulpin-badge" id="card-ulpin">-</div>
@@ -289,14 +290,17 @@
         mesh.add(line);
 
         const floorValue = props.Floor;
+        const sourceFloors = Number.isInteger(Number(floorValue)) && Number(floorValue) > 0 ? Number(floorValue) : null;
+        const estimatedFloors = Math.max(1, Math.round(depth / 3));
         mesh.userData = {
           id: props.Unit_ID || props.ULPIN || `Feature ${index + 1}`,
           type: props.Type || 'Property',
           height: `${depth.toFixed(1)} m`,
-          floors: floorValue === 'G' ? 'Ground' : String(floorValue || 'N/A'),
+          floors: `${sourceFloors || estimatedFloors} Storeys`,
+          floorSource: sourceFloors ? 'Source data' : 'Estimated from height',
           baseZ: `${baseHeight.toFixed(1)} m`,
           ulpin: props.ULPIN || 'N/A',
-          floorCount: Math.max(1, Number(floorValue) || Math.round(depth / 3)),
+          floorCount: sourceFloors || estimatedFloors,
           assignments: []
         };
 
@@ -327,6 +331,11 @@
       };
 
       const cityObjects = data.CityObjects;
+      const getBuildingAttributes = (id, object) => {
+        if (object.attributes) return object.attributes;
+        const parent = Object.values(cityObjects).find(candidate => Array.isArray(candidate.children) && candidate.children.includes(id));
+        return parent ? (parent.attributes || {}) : {};
+      };
 
       for (let id in cityObjects) {
         const obj = cityObjects[id];
@@ -390,7 +399,10 @@
             mesh.add(line);
 
             const height = Math.max(1, (maxZ - minZ));
-            const floors = Math.max(1, Math.round(height / 3.0));
+            const attributes = getBuildingAttributes(id, obj);
+            const sourceFloors = Number.isInteger(Number(attributes.b3_bouwlagen)) && Number(attributes.b3_bouwlagen) > 0 ? Number(attributes.b3_bouwlagen) : null;
+            const estimatedFloors = Math.max(1, Math.round(height / 3.0));
+            const floors = sourceFloors || estimatedFloors;
             const ulpin = `NL-RD-${Math.abs(Math.round(centerX))}-${Math.abs(Math.round(centerY))}-A-${floors}F`;
 
             mesh.userData = {
@@ -398,6 +410,7 @@
               type: obj.type,
               height: height.toFixed(1) + ' m',
               floors: floors + ' Storeys',
+              floorSource: sourceFloors ? 'Source data' : 'Estimated from height',
               baseZ: centerZ.toFixed(1) + ' m (MSL)',
               ulpin: ulpin,
               floorCount: floors,
@@ -437,18 +450,23 @@
     // --- 5. INTERACTION & RAYCASTING ---
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    let pointerStart = null;
 
-    window.addEventListener('click', function(e) {
-      if (e.target.closest('.overlay') || e.target.closest('#property-card')) return;
+    renderer.domElement.addEventListener('pointerdown', event => {
+      pointerStart = { x: event.clientX, y: event.clientY };
+    });
 
-      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    renderer.domElement.addEventListener('pointerup', function(event) {
+      if (!pointerStart || Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 6) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
 
-      const intersects = raycaster.intersectObjects(buildingMeshes, false);
+      const intersects = raycaster.intersectObjects(buildingMeshes, true);
 
       if (intersects.length > 0) {
-        const hit = intersects[0].object;
+        const hit = intersects[0].object.userData.id ? intersects[0].object : intersects[0].object.parent;
 
         // Reset previous highlight
         if (selectedMesh && selectedMesh !== hit) {
@@ -463,6 +481,7 @@
         document.getElementById('card-id').textContent = meta.id;
         document.getElementById('card-height').textContent = meta.height;
         document.getElementById('card-floors').textContent = meta.floors;
+        document.getElementById('card-floor-source').textContent = meta.floorSource;
         document.getElementById('card-z').textContent = meta.baseZ;
         document.getElementById('card-ulpin').textContent = meta.ulpin;
         document.getElementById('floor-count').value = meta.floorCount || 1;
@@ -470,6 +489,7 @@
         drawFloorDividers();
         document.getElementById('property-card').style.display = 'block';
       }
+      pointerStart = null;
     });
 
     function renderFloorEditor(meta) {
