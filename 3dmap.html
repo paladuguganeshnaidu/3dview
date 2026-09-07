@@ -140,7 +140,7 @@
     <button class="action-btn secondary-btn" id="download-data" type="button">Download assignments</button>
   </div>
 
-  <div id="loading-indicator">Parsing CityJSON Geometry...</div>
+  <div id="loading-indicator">Loading buildings...</div>
   <div id="canvas-container"></div>
 
   <script>
@@ -155,9 +155,8 @@
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.shadowMap.enabled = false;
     container.appendChild(renderer.domElement);
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -171,7 +170,6 @@
 
     const dirLight = new THREE.DirectionalLight(0xfff5e6, 0.9);
     dirLight.position.set(400, 600, 200);
-    dirLight.castShadow = true;
     scene.add(dirLight);
 
     // Ground plane grid
@@ -203,7 +201,6 @@
           build3DCadastre(json);
         } catch (err) {
           alert('Error parsing file: ' + err.message);
-        } finally {
           document.getElementById('loading-indicator').style.display = 'none';
         }
       };
@@ -211,7 +208,12 @@
     });
 
     function build3DCadastre(data) {
-      buildingMeshes.forEach(m => scene.remove(m));
+      document.getElementById('loading-indicator').style.display = 'block';
+      document.getElementById('loading-indicator').textContent = 'Preparing buildings...';
+      buildingMeshes.forEach(m => {
+        scene.remove(m);
+        m.geometry.dispose();
+      });
       buildingMeshes = [];
       selectedMesh = null;
       if (floorDividerGroup) { scene.remove(floorDividerGroup); floorDividerGroup = null; }
@@ -282,12 +284,7 @@
         geometry.translate(0, baseHeight, 0);
 
         const mesh = new THREE.Mesh(geometry, wallMaterial);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        const edges = new THREE.EdgesGeometry(geometry, 20);
-        const line = new THREE.LineSegments(edges, edgeMaterial);
-        mesh.add(line);
+        mesh.frustumCulled = true;
 
         const floorValue = props.Floor;
         const sourceFloors = Number.isInteger(Number(floorValue)) && Number(floorValue) > 0 ? Number(floorValue) : null;
@@ -331,17 +328,22 @@
       };
 
       const cityObjects = data.CityObjects;
-      const getBuildingAttributes = (id, object) => {
-        if (object.attributes) return object.attributes;
-        const parent = Object.values(cityObjects).find(candidate => Array.isArray(candidate.children) && candidate.children.includes(id));
-        return parent ? (parent.attributes || {}) : {};
-      };
-
-      for (let id in cityObjects) {
-        const obj = cityObjects[id];
-        if (!obj.geometry || obj.geometry.length === 0) continue;
-
-        obj.geometry.forEach(geom => {
+      const parentAttributes = {};
+      Object.values(cityObjects).forEach(object => {
+        if (!Array.isArray(object.children)) return;
+        object.children.forEach(childId => { parentAttributes[childId] = object.attributes || {}; });
+      });
+      const renderItems = [];
+      Object.entries(cityObjects).forEach(([id, obj]) => {
+        if (obj.type === 'BuildingPart') return;
+        if (!obj.geometry || obj.geometry.length === 0) return;
+        obj.geometry.forEach(geom => renderItems.push({ id, obj, geom }));
+      });
+      let itemIndex = 0;
+      const renderBatch = () => {
+        const batchEnd = Math.min(itemIndex + 40, renderItems.length);
+        for (; itemIndex < batchEnd; itemIndex++) {
+          const { id, obj, geom } = renderItems[itemIndex];
           let surfaces = [];
           if (geom.type === 'Solid') {
             surfaces = geom.boundaries[0];
@@ -391,15 +393,10 @@
             geometry.computeVertexNormals();
 
             const mesh = new THREE.Mesh(geometry, wallMaterial);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-
-            const edges = new THREE.EdgesGeometry(geometry, 25);
-            const line = new THREE.LineSegments(edges, edgeMaterial);
-            mesh.add(line);
+            mesh.frustumCulled = true;
 
             const height = Math.max(1, (maxZ - minZ));
-            const attributes = getBuildingAttributes(id, obj);
+            const attributes = obj.attributes || parentAttributes[id] || {};
             const sourceFloors = Number.isInteger(Number(attributes.b3_bouwlagen)) && Number(attributes.b3_bouwlagen) > 0 ? Number(attributes.b3_bouwlagen) : null;
             const estimatedFloors = Math.max(1, Math.round(height / 3.0));
             const floors = sourceFloors || estimatedFloors;
@@ -420,12 +417,21 @@
             scene.add(mesh);
             buildingMeshes.push(mesh);
           }
-        });
-      }
+        }
+        document.getElementById('loading-indicator').textContent = `Rendering buildings ${itemIndex} / ${renderItems.length}...`;
+        if (itemIndex < renderItems.length) {
+          requestAnimationFrame(renderBatch);
+        } else {
+          document.getElementById('loading-indicator').style.display = 'none';
+          controls.target.set(0, 0, 0);
+          camera.position.set(150, 200, 250);
+          controls.update();
+        }
+      };
+      document.getElementById('loading-indicator').style.display = 'block';
+      document.getElementById('loading-indicator').textContent = `Rendering buildings 0 / ${renderItems.length}...`;
+      requestAnimationFrame(renderBatch);
 
-      controls.target.set(0, 0, 0);
-      camera.position.set(150, 200, 250);
-      controls.update();
     }
 
     // --- 4. GEOMETRY HELPERS ---
