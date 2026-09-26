@@ -1,24 +1,112 @@
 # 3dview — 3D Building Floor Assignment Viewer
 
-A static, browser-based CityJSON viewer for **volumetric cadastre** workflows. Click any building in the 3D city, set the number of floors, and assign per-floor units (side, unit number, latitude, longitude). Assignments export to JSON.
+A static, browser-based **CityJSON viewer** for experimenting with volumetric-cadastre and vertical-property workflows.
 
-Built with Three.js — no server or build step required. Deployed on GitHub Pages.
+The application lets a user inspect a 3D building, assign floors and units, preview ULPIN-style unit identifiers, and export assignments as JSON.
+
+> **Status:** Static prototype / research demonstrator. It is not a legal cadastral or land-title system.
 
 ## Features
-- Renders CityJSON (3D BAG style) building volumes using the most detailed solid (LOD 2.2) — one clean volume per building, no overlapping duplicates.
-- Click a building → measured height, footprint, approved floors (from `b3_bouwlagen`) and a height-vs-approved review chip.
-- Divide any building into N floors with visible dividers.
-- Per-floor unit editor: side (N/E/S/W), unit number, latitude, longitude; add/remove units per floor.
-- ULPIN-style unit code preview per floor.
-- Export all building assignments as JSON.
-- Two bundled datasets (`9-356-364.city.json`, `9-572-508.city.json`) plus "Open file…" for any CityJSON.
-- Time-sliced rendering keeps the page responsive on large tiles.
 
-## Use
-Open https://paladuguganeshnaidu.github.io/3dview/ (or `index.html` locally via a static server).
+- Renders CityJSON building volumes.
+- Uses the most detailed available building part representation selected by the viewer.
+- Displays building metadata such as measured height, footprint and approved-floor information when present.
+- Divides a building into a configurable number of floors.
+- Assigns per-floor units with:
+  - side (N/E/S/W);
+  - unit number;
+  - latitude;
+  - longitude.
+- Shows a ULPIN-style unit-code preview.
+- Exports building assignments as JSON.
+- Bundles two CityJSON demo datasets:
+  - `9-356-364.city.json`
+  - `9-572-508.city.json`
+- Supports opening another CityJSON file locally.
+- Uses time-sliced rendering to keep large tiles responsive.
 
-- **Click building** — open the record/assignment panel.
-- **Drag** — rotate · **Scroll** — zoom · **Right-drag** — pan.
+## Technology
 
-## Data notes
-Each `Building` (Pand) carries its metadata (`b3_bouwlagen` = approved floor count, roof heights, footprint area). Its `BuildingPart` child holds the actual 3D solid. The viewer renders each part once at its highest LOD and joins it to the parent building for floor assignment. Where no approved floor count exists in the source, the value is marked accordingly and can be set manually.
+- Three.js
+- CityJSON data
+- HTML / CSS / JavaScript
+- Browser APIs for local file selection and JSON export
+
+No backend or database is required for the current application.
+
+## Online demo
+
+GitHub Pages:
+
+https://paladuguganeshnaidu.github.io/3dview/
+
+You can also open the static `index.html` locally through a static web server.
+
+## Usage
+
+1. Open the viewer.
+2. Click a building.
+3. Inspect the building record and floor metadata.
+4. Choose the number of floors.
+5. Add or edit units for each floor.
+6. Export the assignments as JSON.
+
+### Controls
+
+| Action | Interaction |
+|---|---|
+| Rotate | Drag |
+| Zoom | Scroll |
+| Pan | Right-drag |
+
+## Data interpretation
+
+The viewer uses the metadata supplied by the CityJSON source. Building and BuildingPart relationships are used to associate 3D geometry with building-level attributes.
+
+Fields such as `b3_bouwlagen` are source metadata, not measurements invented by the viewer.
+
+When an approved floor count is unavailable, the interface allows manual assignment rather than fabricating a source value.
+
+## Project scope
+
+### In scope
+
+- 3D building inspection.
+- Floor visualization.
+- Unit assignment.
+- JSON export.
+- Demonstration of vertical-property data handling.
+
+### Out of scope
+
+- Official cadastral registration.
+- Ownership verification.
+- Survey-grade positioning.
+- Persistent multi-user storage.
+- Server-side authorization.
+
+## Validation and performance
+
+The project is a static browser application. This repository does not claim independently measured P95/P99 latency, throughput, concurrent-user capacity, or formal accessibility scores.
+
+Large-file responsiveness depends on browser, device and CityJSON tile size.
+
+## Known limitations
+
+- No backend persistence.
+- No authentication.
+- No database.
+- No authoritative cadastral integration.
+- ULPIN-style codes are demonstrative and should not be interpreted as official identifiers.
+
+## License
+
+No explicit open-source license is currently declared in the repository.
+
+Until a license is added, reuse should be treated as restricted by copyright law.
+
+## Author
+
+Paladugu Ganesh Naidu
+
+Repository: https://github.com/paladuguganeshnaidu/3dview
